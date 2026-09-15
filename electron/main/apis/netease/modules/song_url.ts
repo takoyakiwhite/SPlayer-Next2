@@ -26,7 +26,7 @@ const song_url: NeteaseModule = (query, request) => {
   if (level === "sky") {
     data.immerseType = query.immerseType ?? "c51";
   }
-  const option = createOption(query, "xeapi");
+  const option = createOption(query);
   if (level === "vivid") {
     data.encodeType = "mp3";
     const cookie = option.cookie;
