@@ -32,6 +32,7 @@ import { appName, getSongCacheDir } from "@main/utils/config";
 import * as songCache from "@main/services/songCache";
 import { parseArtists, parseAlbum, formatArtists, artistNames } from "@main/utils/metadata";
 import { playerLog } from "@main/utils/logger";
+import { updatePowerBlocker, releasePowerBlocker } from "@main/utils/powerBlocker";
 import { ErrorCode } from "@shared/types/errors";
 import type {
   Artist,
@@ -116,6 +117,8 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
     switch (event.type) {
       case "stateChanged": {
         const state = (event.state ?? "idle") as PlayerState;
+        // 播放中阻止系统休眠，暂停/停止时释放唤醒锁，保证系统可正常休眠
+        updatePowerBlocker(state === "playing" || state === "loading");
         // 更新缩略图工具栏和托盘菜单
         getThumbar()?.updateThumbar(state === "playing");
         setTrayPlayState(state === "playing" ? "playing" : "paused");
@@ -202,6 +205,13 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         requestReinit(inst);
         break;
       }
+      case "outputFallback": {
+        // 独占模式打开失败已自动回退共享模式，转发原因给渲染端提示
+        const reason = event.reason ?? "unavailable";
+        playerLog.warn(`独占模式不可用，已回退共享模式: ${reason}`);
+        sendToMain("player:event", { type: "outputFallback", data: { reason } });
+        break;
+      }
     }
   });
 };
@@ -214,6 +224,14 @@ export const registerPlayerIpc = (): void => {
   // 注册实例创建/重建时的回调
   onPlayerCreated(registerNativeEvents);
   onPlayerCreated(startDeviceMonitoring);
+  // 启动时同步独占模式开关到引擎（默认共享，无需处理）
+  onPlayerCreated((inst) => {
+    if (store.get("player.audioOutputMode") === "exclusive") {
+      inst.setExclusiveMode(true).catch((error) => {
+        playerLog.warn("应用独占模式配置失败:", error);
+      });
+    }
+  });
   // 加载音频文件
   ipcMain.handle("player:load", async (_event, source: string, options: LoadOptions = {}) => {
     cancelPendingReinit();
@@ -464,6 +482,15 @@ export const registerPlayerIpc = (): void => {
         isFinished: raw.isFinished,
       },
     };
+  });
+
+  // 获取当前真实的音频流与输出参数
+  ipcMain.handle("player:getStreamInfo", () => {
+    try {
+      return { success: true, data: getPlayer().getStreamInfo() };
+    } catch (error) {
+      return fail(ErrorCode.UNKNOWN, error);
+    }
   });
 
   // 重建音频输出设备
@@ -784,6 +811,9 @@ export const registerPlayerIpc = (): void => {
     wsBroadcast(stoppedEvent);
   };
   powerMonitor.on("resume", resumeHandler);
-  // 退出前停止设备监听
-  app.on("before-quit", stopDeviceMonitoring);
+  // 退出前停止设备监听并释放休眠抑制
+  app.on("before-quit", () => {
+    stopDeviceMonitoring();
+    releasePowerBlocker();
+  });
 };
