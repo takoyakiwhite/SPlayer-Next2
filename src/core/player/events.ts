@@ -1,3 +1,4 @@
+import { queueEntries } from "@/stores/queue";
 import type { PlayerEvent } from "@shared/types/player";
 import i18n from "@/i18n";
 import { toast } from "@/composables/useToast";
@@ -27,7 +28,7 @@ import {
   prevTrack,
   recoverFromSourceFailure,
   refreshDevices,
-  seek,
+  restartCurrentTrack,
   setRepeatMode,
   setShuffleMode,
   trySmartTransition,
@@ -49,10 +50,8 @@ const finishCurrentTrack = async (): Promise<void> => {
     playStats.onTrackEnded(repeatOne && !stopByTimer);
     // 定时关闭"等本曲结束"模式
     if (stopByTimer) return;
-    // 单曲循环：seek 回开头继续播放
     if (repeatOne) {
-      await seek(0, true);
-      await play();
+      await restartCurrentTrack();
     } else {
       await nextTrack();
     }
@@ -152,6 +151,17 @@ export const handleEvent = async (event: PlayerEvent): Promise<void> => {
     case "play":
       await play();
       break;
+    case "getQueue": {
+      const { requestId, offset, limit } = event.data;
+      const entries = queueEntries.value;
+      window.api.player.respondQueue(requestId, {
+        tracks: entries.slice(offset, offset + limit).map((item) => toRaw(item.track)),
+        total: entries.length,
+        currentIndex: status.currentIndex,
+        offset,
+      });
+      break;
+    }
     case "playTrack":
       await playNow(event.data.track);
       break;
