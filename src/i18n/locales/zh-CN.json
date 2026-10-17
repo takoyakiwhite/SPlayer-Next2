@@ -815,7 +815,11 @@
       "showMore": "更多贡献者",
       "collapse": "收起",
       "commit": "提交",
-      "date": "日期"
+      "date": "日期",
+      "dependencies": {
+        "lyrics": "类 Apple Music 歌词显示组件库",
+        "neteaseApi": "NCM API 备份 + 增强"
+      }
     },
     "storeVersion": "Store",
     "language": {
@@ -1224,6 +1228,10 @@
     "autoImmersive": {
       "label": "自动沉浸模式",
       "description": "鼠标静止或离开窗口时，自动隐藏全屏播放器顶/底栏与鼠标"
+    },
+    "keepScreenAwake": {
+      "label": "播放时保持屏幕常亮",
+      "description": "仅在播放页展开时生效"
     },
     "showTranslation": {
       "label": "显示翻译",
